@@ -45,13 +45,13 @@ jobs:
     outputs:
       versione: ${{ steps.v.outputs.versione }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: carpaaaaa/onibi
           ref: ${{ needs.controlla.outputs.sha }}
           ssh-key: ${{ secrets.SOURCE_KEY }}
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -78,7 +78,7 @@ jobs:
     needs: costruisci
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: |
           v="${{ needs.costruisci.outputs.versione }}"
           sed -i "s/^Ultima versione: .*/Ultima versione: $v ($(date -u +%Y-%m-%d))/" README.md
