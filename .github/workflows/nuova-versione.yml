@@ -1,0 +1,87 @@
+# Ogni mezz'ora guarda se il codice di Onibi (il repo privato carpaaaaa/onibi, letto con una chiave di sola
+# lettura, il segreto SOURCE_KEY) è cambiato su master. Se sì: test, installer per Windows, release qui con
+# Onibi-Setup.exe e latest.yml. Le app installate la trovano da sole al prossimo avvio.
+name: Nuova versione
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nuova-versione
+  cancel-in-progress: false
+
+jobs:
+  controlla:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.c.outputs.sha }}
+      nuova: ${{ steps.c.outputs.nuova }}
+    steps:
+      - id: c
+        env:
+          SOURCE_KEY: ${{ secrets.SOURCE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$SOURCE_KEY" ]; then echo "::warning::manca il segreto SOURCE_KEY: niente build"; echo "nuova=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SOURCE_KEY" > ~/.ssh/onibi && chmod 600 ~/.ssh/onibi
+          sha=$(GIT_SSH_COMMAND="ssh -i $HOME/.ssh/onibi -o StrictHostKeyChecking=accept-new" git ls-remote git@github.com:carpaaaaa/onibi.git refs/heads/master | cut -f1)
+          rm -f ~/.ssh/onibi
+          if [ -z "$sha" ]; then echo "::error::il codice di Onibi non si raggiunge (chiave SOURCE_KEY?)"; exit 1; fi
+          last=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null | grep -oE 'codice [0-9a-f]{40}' | cut -d' ' -f2 || true)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$sha" != "$last" ]; then echo "nuova=true" >> "$GITHUB_OUTPUT"; else echo "nuova=false" >> "$GITHUB_OUTPUT"; fi
+          echo "codice $sha, ultima release ${last:-nessuna}"
+
+  costruisci:
+    needs: controlla
+    if: needs.controlla.outputs.nuova == 'true'
+    runs-on: windows-latest
+    outputs:
+      versione: ${{ steps.v.outputs.versione }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: carpaaaaa/onibi
+          ref: ${{ needs.controlla.outputs.sha }}
+          ssh-key: ${{ secrets.SOURCE_KEY }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # la versione: 0.3 e il numero di commit del codice (cresce sempre, e lo stesso codice ha sempre lo
+      # stesso numero)
+      - id: v
+        shell: bash
+        run: echo "versione=0.3.$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Installer e release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          npx electron-builder --win nsis --publish always
+          -c.extraMetadata.version=${{ steps.v.outputs.versione }}
+          -c.releaseInfo.releaseName="Onibi ${{ steps.v.outputs.versione }}"
+          -c.releaseInfo.releaseNotes="codice ${{ needs.controlla.outputs.sha }}"
+
+  # una riga nel README con l'ultima versione: tiene vivo il repo (GitHub spegne le build a orario nei repo
+  # pubblici senza commit da 60 giorni)
+  annota:
+    needs: costruisci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          v="${{ needs.costruisci.outputs.versione }}"
+          sed -i "s/^Ultima versione: .*/Ultima versione: $v ($(date -u +%Y-%m-%d))/" README.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Versione $v" && git push || echo "niente da annotare"
