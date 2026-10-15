@@ -56,6 +56,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Electron si scarica qui, una volta sola: npm 11 non esegue gli script di installazione, e senza questo
+      # passo lo scaricavano i test che lo caricano, due insieme, e si scontravano ("failed to create
+      # directory …\electron\dist\locales", 2026-10-15)
+      - run: node node_modules/electron/install.js
       - run: npm test
       # la versione: 0.3 e il numero di commit del codice (cresce sempre, e lo stesso codice ha sempre lo
       # stesso numero)
