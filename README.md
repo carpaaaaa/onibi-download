@@ -6,7 +6,7 @@ Un'anima per il tuo PC: una mascotte viva che abita in cima allo schermo di Wind
 
 **[Scarica Onibi per Windows](https://github.com/carpaaaaa/onibi-download/releases/latest/download/Onibi-Setup.exe)**
 
-Ultima versione: 0.3.236 (2026-10-16)
+Ultima versione: 0.3.237 (2026-10-19)
 
 ## Installazione
 
